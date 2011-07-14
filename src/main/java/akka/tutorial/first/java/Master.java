@@ -6,7 +6,6 @@ import static akka.actor.Actors.poisonPill;
 import java.util.concurrent.CountDownLatch;
 
 import akka.actor.ActorRef;
-import akka.actor.Actors;
 import akka.actor.UntypedActor;
 import akka.actor.UntypedActorFactory;
 import akka.routing.Routing.Broadcast;
