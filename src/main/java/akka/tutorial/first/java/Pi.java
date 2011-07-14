@@ -1,6 +1,7 @@
 package akka.tutorial.first.java;
 
 import static akka.actor.Actors.actorOf;
+import scala.Option;
 import akka.actor.ActorRef;
 import akka.actor.UntypedActor;
 import akka.actor.UntypedActorFactory;
@@ -33,9 +34,12 @@ public class Pi {
 		piResultFuture.onComplete(new Procedure<Future<Double>>() {
 			@Override
 			public void apply(Future<Double> future) {
-				Double piResult = future.get();
-				
-				System.out.println("Pi: " + piResult);
+				Option<Double> resultOption = future.result();
+				if (resultOption.isDefined()) {
+					Double piResult = resultOption.get();
+					
+					System.out.println("Pi: " + piResult);
+				}
 			}
 		});
 	}
