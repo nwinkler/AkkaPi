@@ -5,6 +5,7 @@ import akka.actor.ActorRef;
 import akka.actor.UntypedActor;
 import akka.actor.UntypedActorFactory;
 import akka.dispatch.Future;
+import akka.japi.Procedure;
 
 /**
  * Hello world!
@@ -29,10 +30,13 @@ public class Pi {
 		// start the calculation
 		Future<Double> piResultFuture = master.sendRequestReplyFuture(new Calculate());
 
-		piResultFuture.await();
-		
-		Double piResult = piResultFuture.get();
-		
-		System.out.println("Pi: " + piResult);
+		piResultFuture.onComplete(new Procedure<Future<Double>>() {
+			@Override
+			public void apply(Future<Double> future) {
+				Double piResult = future.get();
+				
+				System.out.println("Pi: " + piResult);
+			}
+		});
 	}
 }
