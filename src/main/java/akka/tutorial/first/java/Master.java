@@ -2,30 +2,27 @@ package akka.tutorial.first.java;
 
 import static akka.actor.Actors.actorOf;
 import static akka.actor.Actors.poisonPill;
-
-import java.util.concurrent.CountDownLatch;
-
+import scala.Option;
 import akka.actor.ActorRef;
 import akka.actor.UntypedActor;
 import akka.actor.UntypedActorFactory;
+import akka.dispatch.CompletableFuture;
 import akka.routing.Routing.Broadcast;
 
 public class Master extends UntypedActor {
 	private final int nrOfMessages;
 	private final int nrOfElements;
-	private final CountDownLatch latch;
 
 	private double pi;
 	private int nrOfResults;
 	private long start;
 
 	private ActorRef router;
+	private Option<CompletableFuture<Object>> piResultFuture;
 
-	public Master(int nrOfWorkers, int nrOfMessages, int nrOfElements,
-			CountDownLatch latch) {
+	public Master(int nrOfWorkers, int nrOfMessages, int nrOfElements) {
 		this.nrOfMessages = nrOfMessages;
 		this.nrOfElements = nrOfElements;
-		this.latch = latch;
 
 		// create the workers
 		final ActorRef[] workers = new ActorRef[nrOfWorkers];
@@ -44,6 +41,10 @@ public class Master extends UntypedActor {
 	@Override
 	public void onReceive(Object message) throws Exception {
 		if (message instanceof Calculate) {
+			if (getContext().getSenderFuture().isDefined()) {
+				piResultFuture = getContext().getSenderFuture();
+			}
+			
 			// schedule work
 			for (int start = 0; start < nrOfMessages; start++) {
 				router.sendOneWay(new Work(start, nrOfElements), getContext());
@@ -64,9 +65,13 @@ public class Master extends UntypedActor {
 			pi += result.getValue();
 			nrOfResults += 1;
 			
-			if (nrOfResults == nrOfMessages)
+			if (nrOfResults == nrOfMessages) {
+				if (piResultFuture != null) {
+					piResultFuture.get().completeWithResult(pi);
+				}
+				
 				getContext().stop();
-
+			}
 		} else
 			throw new IllegalArgumentException("Unknown message [" + message
 					+ "]");
@@ -83,6 +88,5 @@ public class Master extends UntypedActor {
 		System.out.println(String.format(
 				"\n\tPi estimate: \t\t%s\n\tCalculation time: \t%s millis", pi,
 				(System.currentTimeMillis() - start)));
-		latch.countDown();
 	}
 }
