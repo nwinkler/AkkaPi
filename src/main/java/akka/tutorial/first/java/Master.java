@@ -41,6 +41,7 @@ public class Master extends UntypedActor {
 	@Override
 	public void onReceive(Object message) throws Exception {
 		if (message instanceof Calculate) {
+			// Store a reference to the original caller's Future - we'll send the result back this way later.
 			if (getContext().getSenderFuture().isDefined()) {
 				piResultFuture = getContext().getSenderFuture();
 			}
@@ -65,7 +66,9 @@ public class Master extends UntypedActor {
 			pi += result.getValue();
 			nrOfResults += 1;
 			
+			// Are we done yet?
 			if (nrOfResults == nrOfMessages) {
+				// We're done, send the result back to the original caller
 				if (piResultFuture != null) {
 					piResultFuture.get().completeWithResult(pi);
 				}
