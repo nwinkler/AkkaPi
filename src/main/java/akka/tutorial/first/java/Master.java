@@ -1,13 +1,11 @@
 package akka.tutorial.first.java;
 
 import static akka.actor.Actors.actorOf;
-import static akka.actor.Actors.poisonPill;
-import scala.Option;
 import akka.actor.ActorRef;
+import akka.actor.Channel;
 import akka.actor.UntypedActor;
 import akka.actor.UntypedActorFactory;
-import akka.dispatch.CompletableFuture;
-import akka.routing.Routing.Broadcast;
+import akka.japi.Procedure;
 
 public class Master extends UntypedActor {
 	private final int nrOfMessages;
@@ -18,7 +16,6 @@ public class Master extends UntypedActor {
 	private long start;
 
 	private ActorRef router;
-	private Option<CompletableFuture<Object>> piResultFuture;
 
 	public Master(int nrOfWorkers, int nrOfMessages, int nrOfElements) {
 		this.nrOfMessages = nrOfMessages;
@@ -39,57 +36,54 @@ public class Master extends UntypedActor {
 	}
 
 	@Override
-	public void onReceive(Object message) throws Exception {
-		if (message instanceof Calculate) {
-			// Store a reference to the original caller's Future - we'll send the result back this way later.
-			if (getContext().getSenderFuture().isDefined()) {
-				piResultFuture = getContext().getSenderFuture();
-			}
-			
-			// schedule work
-			for (int start = 0; start < nrOfMessages; start++) {
-				router.sendOneWay(new Work(start, nrOfElements), getContext());
-			}
-
-			// send a PoisonPill to all workers telling them to shut down
-			// themselves
-			router.sendOneWay(new Broadcast(poisonPill()));
-
-			// send a PoisonPill to the router, telling him to shut himself down
-			router.sendOneWay(poisonPill());
-
-		} else if (message instanceof Result) {
-
-			// handle result from the worker
-			Result result = (Result) message;
-			
-			pi += result.getValue();
-			nrOfResults += 1;
-			
-			// Are we done yet?
-			if (nrOfResults == nrOfMessages) {
-				// We're done, send the result back to the original caller
-				if (piResultFuture != null) {
-					piResultFuture.get().completeWithResult(pi);
-				}
-				
-				getContext().stop();
-			}
-		} else
-			throw new IllegalArgumentException("Unknown message [" + message
-					+ "]");
-	}
-
-	@Override
-	public void preStart() {
-		start = System.currentTimeMillis();
-	}
-
-	@Override
 	public void postStop() {
 		// tell the world that the calculation is complete
 		System.out.println(String.format(
 				"\n\tPi estimate: \t\t%s\n\tCalculation time: \t%s millis", pi,
 				(System.currentTimeMillis() - start)));
 	}
+
+	@Override
+	public void preStart() {
+		start = System.currentTimeMillis();
+		
+		become(scatter);
+	}
+
+	// message handler
+	public void onReceive(Object message) {
+		throw new IllegalStateException("Should be gather or scatter");
+	}
+
+	private final Procedure<Object> scatter = new Procedure<Object>() {
+		public void apply(Object msg) {
+			// schedule work
+			for (int arg = 0; arg < nrOfMessages; arg++) {
+				router.sendOneWay(new Work(arg, nrOfElements), getContext());
+			}
+			// Assume the gathering behavior
+			become(gather(getContext().getChannel()));
+		}
+	};
+
+	private Procedure<Object> gather(final Channel<Object> recipient) {
+		return new Procedure<Object>() {
+			public void apply(Object msg) {
+				// handle result from the worker
+				Result result = (Result) msg;
+				
+				pi += result.getValue();
+				nrOfResults += 1;
+				
+				if (nrOfResults == nrOfMessages) {
+					// send the pi result back to the guy who started the
+					// calculation
+					recipient.sendOneWay(pi);
+					// shut ourselves down, we're done
+					getContext().stop();
+				}
+			}
+		};
+	}
+
 }
