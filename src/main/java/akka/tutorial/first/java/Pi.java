@@ -6,7 +6,6 @@ import akka.actor.ActorRef;
 import akka.actor.UntypedActor;
 import akka.actor.UntypedActorFactory;
 import akka.dispatch.Future;
-import akka.japi.Procedure;
 
 /**
  * Hello world!
@@ -27,20 +26,24 @@ public class Pi {
 				return new Master(nrOfWorkers, nrOfMessages, nrOfElements);
 			}
 		}).start();
+		
+		long start = System.currentTimeMillis();
 
 		// start the calculation
-		Future<Double> piResultFuture = master.sendRequestReplyFuture(new Calculate());
+		Future<Double> piResultFuture = master.sendRequestReplyFuture(new Calculate(), 600, null);
 
-		piResultFuture.onComplete(new Procedure<Future<Double>>() {
-			@Override
-			public void apply(Future<Double> future) {
-				Option<Double> resultOption = future.result();
-				if (resultOption.isDefined()) {
-					Double piResult = resultOption.get();
-					
-					System.out.println("Pi: " + piResult);
-				}
+		try {
+			Option<Double> resultOption = piResultFuture.await().resultOrException();
+			
+			if (resultOption.isDefined()) {
+				Double piResult = resultOption.get();
+				
+				System.out.println("Pi: " + piResult + ", Time: " + (System.currentTimeMillis() - start));
 			}
-		});
+		}
+		catch (Exception e) {
+			System.out.println("Caught Exception while waiting for result.");
+			e.printStackTrace();
+		}
 	}
 }
